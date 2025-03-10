@@ -1,0 +1,523 @@
+{% extends "base.html" %}
+
+{% block title %}MemoryBot - Gallery{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Base styles */
+    body {
+        background-color: #030307;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar {
+        height: 4px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 2px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 2px;
+        }
+
+    /* Masonry-style gallery grid */
+    .gallery-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+        opacity: 0;
+        transition: opacity 0.5s ease;
+        padding: 0;
+        margin-top: 2rem;
+    }
+
+    /* Column-based layout - more reliable than CSS grid for masonry */
+    .gallery-column {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        min-width: 0; /* Prevents overflow */
+    }
+
+    @media (max-width: 1024px) {
+        .gallery-grid {
+            gap: 15px;
+        }
+        .gallery-column:nth-child(3) {
+            display: none;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .gallery-column:nth-child(2) {
+            display: none;
+        }
+    }
+
+    .gallery-grid.loaded {
+            opacity: 1;
+        }
+
+    /* Clean, borderless photo cards */
+    .photo-card {
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+        box-shadow: none;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        cursor: pointer;
+        background-color: transparent;
+        margin-bottom: 0;
+        width: 100%;
+    }
+
+    /* Subtle hover effect like Unsplash */
+    .photo-card:hover {
+        transform: scale(1.03) translateY(-4px);
+        box-shadow: 0 0 15px rgba(255, 107, 107, 0.5);
+        z-index: 10;
+    }
+
+    /* Clean image styling */
+    .photo-card img {
+        width: 100%;
+        height: auto;
+        opacity: 0;
+        transition: opacity 0.3s ease, transform 0.3s ease;
+        display: block;
+    }
+
+    .photo-card.loaded img {
+        opacity: 1;
+    }
+
+    /* Action buttons */
+    .action-buttons {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        gap: 8px;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        z-index: 20;
+    }
+
+    .photo-card:hover .action-buttons {
+        opacity: 1;
+    }
+
+    /* Button styling */
+    .action-buttons button {
+        background-color: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        border-radius: 4px;
+        padding: 6px;
+        transition: background-color 0.2s ease;
+        border: none;
+    }
+
+    .action-buttons button:hover {
+        background-color: rgba(0, 0, 0, 0.7);
+    }
+
+    /* Loading skeleton */
+    .loading-skeleton {
+        background: linear-gradient(90deg, #1a1b23 25%, #2a2b33 50%, #1a1b23 75%);
+        background-size: 200% 100%;
+        animation: loading 1.5s infinite;
+        position: absolute;
+        inset: 0;
+        border-radius: 4px;
+    }
+
+    @keyframes loading {
+        from { background-position: 200% 0; }
+        to { background-position: -200% 0; }
+    }
+
+    /* Filter pills styling */
+    .filter-container {
+        display: flex;
+        overflow-x: auto;
+        padding-bottom: 1rem;
+        margin-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .filter-pill {
+        background: transparent;
+        color: #aaa;
+        border: none;
+        padding: 0.5rem 1rem;
+        margin-right: 1rem;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .filter-pill:hover {
+        color: white;
+    }
+
+    .filter-pill.active {
+        color: white;
+        font-weight: 600;
+        position: relative;
+    }
+
+    .filter-pill.active::after {
+        content: '';
+        position: absolute;
+        bottom: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 20px;
+        height: 2px;
+        background-color: #FF3366;
+        border-radius: 2px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8 bg-[#030307]">
+    <div class="max-w-7xl mx-auto">
+        <!-- Hidden element to store image data -->
+        <div id="gallery-data" data-images='{{ images|default([])|tojson|safe }}' style="display:none;"></div>
+        
+        <!-- Header Section -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white mb-2">Photo Gallery</h1>
+                <p class="text-gray-400">Browse and discover your memories</p>
+            </div>
+        </div>
+
+            <!-- Filter Pills -->
+        <div class="filter-container custom-scrollbar">
+            <button data-filter="all" class="filter-pill active">
+                    All Photos
+                </button>
+            <button data-filter="favorites" class="filter-pill flex items-center">
+                <span>Favorites</span>
+                <span id="favoritesCount" class="ml-2 bg-[#FF3366] bg-opacity-20 text-[#FF3366] text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
+            </button>
+        </div>
+
+        <!-- Gallery Grid with masonry layout -->
+        <div class="gallery-grid" id="masonry-grid">
+            <!-- Column 1 -->
+            <div class="gallery-column" id="column-1"></div>
+            <!-- Column 2 -->
+            <div class="gallery-column" id="column-2"></div>
+            <!-- Column 3 -->
+            <div class="gallery-column" id="column-3"></div>
+            </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Safely load image data from data attribute
+    var GALLERY_IMAGES = [];
+    try {
+        const dataElement = document.getElementById('gallery-data');
+        if (dataElement) {
+            GALLERY_IMAGES = JSON.parse(dataElement.getAttribute('data-images'));
+        }
+    } catch (e) {
+        console.error("Error parsing gallery data:", e);
+    }
+    
+    // Initialize favorites from localStorage
+    let favorites = new Set(JSON.parse(localStorage.getItem('favorites') || '[]'));
+    
+    // Update favorites UI on load
+    document.addEventListener('DOMContentLoaded', () => {
+        updateFavoritesPill();
+        
+        // Set up filter buttons
+        document.querySelectorAll('.filter-pill').forEach(pill => {
+            pill.addEventListener('click', () => {
+                document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+                pill.classList.add('active');
+                const filter = pill.dataset.filter;
+                filterGallery(filter);
+            });
+        });
+        
+        // Initialize the gallery with proper column distribution
+        initializeGallery();
+        
+        // Initialize Intersection Observer for lazy loading
+        initLazyLoading();
+        
+        // Mark the gallery as loaded to fade it in
+        document.querySelector('.gallery-grid').classList.add('loaded');
+    });
+    
+    // Create and distribute gallery items
+    function initializeGallery() {
+        // Use the globally defined variable
+        console.log("Images data:", GALLERY_IMAGES);
+        
+        const columns = [
+            document.getElementById('column-1'),
+            document.getElementById('column-2'),
+            document.getElementById('column-3')
+        ];
+        
+        // Verify all columns exist
+        if (!columns[0] || !columns[1] || !columns[2]) {
+            console.error("Column elements not found in the DOM");
+            return;
+        }
+        
+        // Make sure images is iterable
+        if (!Array.isArray(GALLERY_IMAGES) || GALLERY_IMAGES.length === 0) {
+            console.warn("No images to display or images is not an array");
+            return;
+        }
+        
+        // Limit initial load to improve performance
+        const initialBatchSize = 10; // Load first 10 images immediately
+        const imagesToRender = GALLERY_IMAGES.slice(0, initialBatchSize);
+        
+        // Distribute initial batch of images among columns
+        imagesToRender.forEach((image, index) => {
+            if (!image || !image.filename) {
+                console.warn("Invalid image data:", image);
+                return;
+            }
+            
+            const columnIndex = index % 3;
+            const card = createPhotoCard(image);
+            columns[columnIndex].appendChild(card);
+        });
+        
+        // If there are more images, set up lazy loading for them
+        if (GALLERY_IMAGES.length > initialBatchSize) {
+            setupLazyImageLoading(GALLERY_IMAGES.slice(initialBatchSize), columns);
+        }
+    }
+    
+    // Load more images as user scrolls
+    function setupLazyImageLoading(remainingImages, columns) {
+        let currentIndex = 0;
+        const batchSize = 10; // Load 15 more images at a time
+        
+        // Create a scroll listener that loads more images when user nears bottom
+        const scrollListener = () => {
+            const scrollPosition = window.innerHeight + window.scrollY;
+            const pageHeight = document.body.offsetHeight;
+            
+            // If user has scrolled to 80% of the page, load more images
+            if (scrollPosition > pageHeight * 0.8 && currentIndex < remainingImages.length) {
+                // Determine how many images to load (up to batchSize)
+                const imagesToLoad = Math.min(batchSize, remainingImages.length - currentIndex);
+                
+                // Load the next batch of images
+                for (let i = 0; i < imagesToLoad; i++) {
+                    const image = remainingImages[currentIndex];
+                    if (image && image.filename) {
+                        const columnIndex = currentIndex % 3;
+                        const card = createPhotoCard(image);
+                        columns[columnIndex].appendChild(card);
+                    }
+                    currentIndex++;
+                }
+                
+                // Initialize lazy loading for the new images
+                initLazyLoading();
+                
+                // If all images are loaded, remove the scroll listener
+                if (currentIndex >= remainingImages.length) {
+                    window.removeEventListener('scroll', scrollListener);
+                }
+            }
+        };
+        
+        // Add the scroll listener
+        window.addEventListener('scroll', scrollListener);
+    }
+    
+    // Create a photo card element
+    function createPhotoCard(image) {
+        const card = document.createElement('div');
+        card.className = 'photo-card';
+        card.dataset.imageId = image.filename;
+        card.onclick = () => viewDetails(image.filename);
+        
+        // Create skeleton
+        const skeleton = document.createElement('div');
+        skeleton.className = 'loading-skeleton';
+        card.appendChild(skeleton);
+        
+        // Create image
+        const img = document.createElement('img');
+        img.dataset.src = `/images/${image.filename}`;
+        img.src = '';
+        img.alt = image.metadata?.description || '';
+        img.onload = () => handleImageLoad(img);
+        img.onerror = () => handleImageError(img);
+        card.appendChild(img);
+        
+        // Create action buttons
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+        actionButtons.innerHTML = `
+            <button class="favorite-btn" onclick="toggleFavorite('${image.filename}', event)">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                </svg>
+            </button>
+        `;
+        card.appendChild(actionButtons);
+        
+        return card;
+    }
+    
+    // Lazy loading implementation
+    function initLazyLoading() {
+        const observerOptions = {
+            root: null,
+            rootMargin: '200px', // Start loading when images are 200px from viewport
+            threshold: 0.1
+        };
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const card = entry.target;
+                    const img = card.querySelector('img');
+                    
+                    if (img && img.dataset.src) {
+                        // Set the actual image source
+                        img.src = img.dataset.src;
+                    }
+                    
+                    // Once loaded, stop observing this element
+                    observer.unobserve(card);
+                }
+            });
+        }, observerOptions);
+        
+        // Observe all photo cards
+        document.querySelectorAll('.photo-card').forEach(card => {
+            observer.observe(card);
+        });
+    }
+    
+    // Handle image load event
+    function handleImageLoad(img) {
+        const card = img.closest('.photo-card');
+        if (card) {
+            // Remove skeleton loader
+            const skeleton = card.querySelector('.loading-skeleton');
+            if (skeleton) {
+                skeleton.remove();
+            }
+            
+            // Add loaded class for fade-in effect
+            card.classList.add('loaded');
+            
+            // Mark as favorite if in favorites
+            const imageId = card.dataset.imageId;
+            if (favorites.has(imageId)) {
+                const favoriteBtn = card.querySelector('.favorite-btn svg');
+                if (favoriteBtn) {
+                    favoriteBtn.setAttribute('fill', 'currentColor');
+                }
+            }
+        }
+    }
+    
+    // Handle image error
+    function handleImageError(img) {
+        const card = img.closest('.photo-card');
+        if (card) {
+            // Instead of hiding, show an error placeholder
+            img.src = '/static/images/placeholder.jpg';
+            card.classList.add('error');
+            
+            // Set a default span for error images
+            card.style.setProperty('--span', 25);
+        }
+    }
+    
+    // Toggle favorite status
+    function toggleFavorite(imageId, event) {
+        if (event) {
+            event.stopPropagation();
+        }
+        
+        const isFavorite = favorites.has(imageId);
+        const btn = event.currentTarget;
+        const icon = btn.querySelector('svg');
+
+        if (isFavorite) {
+            favorites.delete(imageId);
+            icon.setAttribute('fill', 'none');
+        } else {
+            favorites.add(imageId);
+            icon.setAttribute('fill', 'currentColor');
+        }
+
+        // Save to localStorage
+        localStorage.setItem('favorites', JSON.stringify([...favorites]));
+        
+        // Update favorites count
+        updateFavoritesPill();
+
+        // If we're in favorites view, refresh the view
+        const currentFilter = document.querySelector('.filter-pill.active').dataset.filter;
+        if (currentFilter === 'favorites') {
+            filterGallery('favorites');
+        }
+    }
+
+    // Update favorites pill with count
+    function updateFavoritesPill() {
+        const favCount = favorites.size;
+        const countBadge = document.getElementById('favoritesCount');
+        
+        if (favCount > 0) {
+            countBadge.textContent = favCount;
+            countBadge.classList.remove('hidden');
+        } else {
+            countBadge.classList.add('hidden');
+        }
+    }
+
+    // Filter gallery by category
+    function filterGallery(filter) {
+        // Filter the images
+        const items = document.querySelectorAll('.photo-card');
+
+        items.forEach(item => {
+            const imageId = item.dataset.imageId;
+            if (filter === 'all' || (filter === 'favorites' && favorites.has(imageId))) {
+                item.classList.remove('hidden');
+            } else {
+                item.classList.add('hidden');
+            }
+        });
+    }
+
+    // View image details
+    function viewDetails(imageId, event) {
+        if (event) {
+            event.stopPropagation();
+        }
+        window.location.href = `/image/${imageId}`;
+    }
+    </script>
+{% endblock %}

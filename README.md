@@ -31,7 +31,7 @@ MemoryBot is a web application designed to manage and search photos using advanc
 
 1. **Clone the repository**:
    ```bash
-   git clone
+   git clone https://github.com/fahimulalamaraf/memory-bot.git
    cd memorybot
    ```
 

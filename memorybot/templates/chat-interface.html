@@ -1,0 +1,529 @@
+{% extends "base.html" %}
+
+{% block title %}MemoryBot - Chat Assistant{% endblock %}
+
+{% block content %}
+<div class="min-h-screen pt-32 pb-8 px-4 bg-[#030307]">
+    <div class="max-w-6xl mx-auto">
+        <!-- Main Chat Area -->
+        <div class="glass-card rounded-2xl p-6 h-[calc(100vh-12rem)] flex flex-col">
+            <!-- Chat Messages -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto space-y-6 mb-6 p-4">
+                <!-- Initial Bot Message -->
+                <div class="flex items-start space-x-4">
+                    <div class="chat-bubble bot-message rounded-2xl p-4 text-white max-w-[80%]">
+                        <p>Hello! I'm here to help you with your photos today.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Typing Indicator -->
+            <div id="typing-indicator" class="hidden">
+                <div class="flex items-start space-x-4 mb-4">
+                    <div class="w-8 h-8 bg-gradient-to-r from-pink-500 to-red-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <span class="text-white text-sm font-bold">M</span>
+                    </div>
+                    <div class="chat-bubble bot-message rounded-2xl p-4 text-white max-w-[80%]">
+                        <div class="flex items-center space-x-2">
+                            <span>Thinking</span>
+                            <div class="typing-animation">
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                                <span class="dot"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area with Image Preview -->
+            <div class="flex flex-col space-y-4">
+                <!-- Image Preview -->
+                <div id="image-preview" class="hidden px-4">
+                    <div class="relative inline-block">
+                        <img id="preview-image" class="max-h-32 rounded-lg">
+                        <button onclick="removeImage()" 
+                                class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input Form -->
+                <form id="chat-form" class="flex items-center space-x-4 p-4" onsubmit="sendMessage(event)">
+                    <label for="image-upload" class="cursor-pointer">
+                        <div id="upload-button" class="w-10 h-10 rounded-xl bg-gray-700 flex items-center justify-center text-white hover:bg-gray-600 transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                        </div>
+                        <input type="file" id="image-upload" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                    </label>
+
+                    <div class="flex-1 glass-card rounded-xl relative">
+                        <input type="text" 
+                               id="message-input"
+                               placeholder="Ask about your photos..." 
+                               class="w-full bg-transparent text-white px-4 py-3 focus:outline-none">
+                    </div>
+
+                    <button type="submit" 
+                            class="w-10 h-10 rounded-xl bg-gradient-to-r from-pink-500 to-red-500 flex items-center justify-center text-white hover:opacity-90 transition-opacity">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.chat-bubble {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bot-message {
+    margin-right: auto;
+}
+
+.user-message {
+    margin-left: auto;
+    background: linear-gradient(135deg, #FF3366 0%, #FF6B6B 100%);
+    border: none;
+}
+
+.glass-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.modal-overlay {
+    backdrop-filter: blur(5px);
+}
+    
+.gallery-item {
+    position: relative;
+    width: 250px;  /* Fixed width */
+    aspect-ratio: 1;  /* Force square aspect ratio */
+    margin: 0 auto;
+}
+    
+.gallery-item img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;  /* This will show the full image */
+    background-color: rgba(0, 0, 0, 0.2);  /* Subtle background for transparent areas */
+    transition: all 0.3s ease;
+    border-radius: 8px;
+}
+    
+.gallery-item:hover img {
+    transform: scale(1.05);
+}
+
+.chat-bubble {
+    max-width: 80%;
+    margin: 8px 0;
+}
+
+.image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.image-wrapper {
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.image-wrapper img {
+    width: 100%;
+    height: auto;
+    max-height: 300px;
+    object-fit: contain;
+    background-color: rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s ease;
+}
+
+.image-wrapper:hover img {
+    transform: scale(1.05);
+}
+
+.image-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 100;
+    width: 200px;
+    margin-bottom: 8px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.image-wrapper:hover .image-tooltip {
+    opacity: 1;
+}
+
+.thinking {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(47, 51, 65, 0.8);
+    border-radius: 16px;
+    max-width: 80px;
+    margin-top: 8px;
+}
+    
+.thinking-dots {
+    display: flex;
+}
+    
+.thinking-dots span {
+    background-color: #ffffff;
+    border-radius: 50%;
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin: 0 2px;
+    opacity: 0.6;
+}
+    
+.thinking-dots span:nth-child(1) {
+    animation: dot 1.4s infinite;
+}
+    
+.thinking-dots span:nth-child(2) {
+    animation: dot 1.4s infinite 0.2s;
+}
+    
+.thinking-dots span:nth-child(3) {
+    animation: dot 1.4s infinite 0.4s;
+}
+    
+@keyframes dot {
+    0% {
+        opacity: 0.2;
+        transform: scale(0.8);
+    }
+    20% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+    40% {
+        opacity: 0.2;
+        transform: scale(0.8);
+    }
+    100% {
+        opacity: 0.2;
+        transform: scale(0.8);
+    }
+}
+</style>
+
+<script>
+let currentImageData = null;
+let currentSessionId = null;
+
+function handleImageUpload(event) {
+    const file = event.target.files[0];
+    if (file) {
+        // Check file size and type
+        if (file.size > 10 * 1024 * 1024) { // 10MB limit
+            alert('File size too large. Please select an image under 10MB.');
+            return;
+        }
+        
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                currentImageData = e.target.result;
+                console.log('Image loaded successfully');
+                
+                // Notify user that image is ready to send
+                const messageInput = document.getElementById('message-input');
+                if (messageInput) {
+                    messageInput.placeholder = "Image ready to send. Add a message (optional)...";
+                }
+                
+                // Change upload button color to indicate image is selected
+                const uploadButton = document.getElementById('upload-button');
+                if (uploadButton) {
+                    uploadButton.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                    uploadButton.classList.add('bg-pink-500', 'hover:bg-pink-600');
+                }
+                
+                // Show preview
+                const previewDiv = document.getElementById('image-preview');
+                const previewImg = document.getElementById('preview-image');
+                if (previewDiv && previewImg) {
+                    previewDiv.classList.remove('hidden');
+                    previewImg.src = currentImageData;
+                    previewImg.onload = () => console.log('Preview displayed successfully');
+                }
+            } catch (error) {
+                console.error('Error handling image:', error);
+                alert('Error processing image. Please try again.');
+            }
+        };
+
+        reader.onerror = function(error) {
+            console.error('Error reading file:', error);
+            alert('Error reading file. Please try again.');
+        };
+
+        reader.readAsDataURL(file);
+    }
+}
+
+async function sendMessage(event) {
+    event.preventDefault();
+    const messageInput = document.getElementById('message-input');
+    const message = messageInput.value.trim();
+    
+    // Validate inputs
+    if (!message && !currentImageData) {
+        console.log('No message or image to send');
+        return;
+    }
+    
+    try {
+        // Create FormData object
+        const formData = new FormData();
+        formData.append('message', message);
+        
+        // Add session ID if exists
+        if (currentSessionId) {
+            formData.append('session_id', currentSessionId);
+        }
+        
+        if (currentImageData) {
+            // Convert base64 to blob
+            const response = await fetch(currentImageData);
+            const blob = await response.blob();
+            formData.append('image', blob, 'image.jpg');
+            
+            // Show user message with image
+            appendMessage({
+                text: message,
+                image: currentImageData
+            }, true);
+            
+            // Hide the preview immediately after sending
+            const previewDiv = document.getElementById('image-preview');
+            if (previewDiv) previewDiv.classList.add('hidden');
+        } else {
+            // Show user message without image
+            appendMessage({
+                text: message
+            }, true);
+        }
+        
+        messageInput.value = '';
+        
+        // Show thinking animation
+        showThinking();
+        
+        // Send request
+        const response = await fetch('/api/v1/chat/message', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('Response received:', data);
+
+        // Store the session ID from response
+        if (data.session_id) {
+            currentSessionId = data.session_id;
+            console.log('Session ID updated:', currentSessionId);
+        }
+        
+        // Remove thinking animation before showing response
+        removeThinking();
+        appendMessage(data);
+        
+        // Clear image after successful send
+        if (currentImageData) {
+            removeImage();
+        }
+        
+    } catch (error) {
+        console.error('Error sending message:', error);
+        // Remove thinking animation in case of error
+        removeThinking();
+        appendMessage({
+            text: 'Sorry, I encountered an error processing your request.',
+            type: 'error'
+        });
+    }
+}
+
+function appendMessage(message, isUser = false) {
+    const chatMessages = document.getElementById('chat-messages');
+    if (!chatMessages) return;
+    
+    const messageContainer = document.createElement('div');
+    messageContainer.className = `flex items-start ${isUser ? 'justify-end' : ''} space-x-4 mb-4`;
+
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble ${isUser ? 'user-message' : 'bot-message'} rounded-2xl p-4 text-white max-w-[80%]`;
+
+    // Add image if present in user message
+    if (isUser && message.image) {
+        const img = document.createElement('img');
+        img.src = message.image;
+        img.className = 'max-h-48 rounded-lg mb-2';
+        img.onload = () => console.log('Message image loaded successfully');
+        img.onerror = (error) => console.error('Error loading message image:', error);
+        bubble.appendChild(img);
+    }
+
+    // Add text message
+    if (message.text) {
+        const text = document.createElement('p');
+        text.textContent = message.text;
+        bubble.appendChild(text);
+    }
+
+    // Add results if present
+    if (message.results && message.results.length > 0) {
+        const imageGrid = document.createElement('div');
+        imageGrid.className = 'grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4';
+        message.results.forEach(result => {
+            if (!result.filename) return;
+            
+            const imgWrapper = document.createElement('div');
+            imgWrapper.className = 'relative aspect-square rounded-lg overflow-hidden';
+            imgWrapper.innerHTML = `
+                <img src="/images/${result.filename}" 
+                     alt="${result.metadata?.description || 'Search result'}"
+                     class="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                     onclick="showImageDetails('${result.filename}')"
+                     onerror="this.src='/static/images/placeholder.jpg'">
+            `;
+            imageGrid.appendChild(imgWrapper);
+        });
+        bubble.appendChild(imageGrid);
+    }
+
+    messageContainer.appendChild(bubble);
+    chatMessages.appendChild(messageContainer);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function removeImage() {
+    currentImageData = null;
+    const previewDiv = document.getElementById('image-preview');
+    const previewImg = document.getElementById('preview-image');
+    const imageInput = document.getElementById('image-upload');
+    
+    if (previewDiv) previewDiv.classList.add('hidden');
+    if (previewImg) previewImg.src = '';
+    if (imageInput) imageInput.value = '';
+    
+    // Reset placeholder text
+    const messageInput = document.getElementById('message-input');
+    if (messageInput) {
+        messageInput.placeholder = "Ask about your photos...";
+    }
+    
+    // Reset upload button color
+    const uploadButton = document.getElementById('upload-button');
+    if (uploadButton) {
+        uploadButton.classList.remove('bg-pink-500', 'hover:bg-pink-600');
+        uploadButton.classList.add('bg-gray-700', 'hover:bg-gray-600');
+    }
+}
+
+// Add the image detail viewing functionality
+function showImageDetails(filename) {
+    console.log('Opening image:', filename);  // Debug log
+    window.location.href = `/image/${filename}`;
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    const imageUpload = document.getElementById('image-upload');
+    if (imageUpload) {
+        imageUpload.addEventListener('change', handleImageUpload);
+    }
+});
+
+// Load recent photos on page load
+async function loadRecentPhotos() {
+    // This function is now empty as the endpoint has been removed
+}
+
+// Function to show thinking animation
+function showThinking() {
+    const thinkingHtml = `
+        <div class="flex items-start space-x-4 thinking-container">
+            <div class="w-8 h-8 bg-gradient-to-r from-pink-500 to-red-500 rounded-lg flex items-center justify-center flex-shrink-0">
+                <span class="text-white text-sm font-bold">M</span>
+            </div>
+            <div class="thinking">
+                <div class="thinking-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const chatMessages = document.getElementById('chat-messages');
+    if (chatMessages) {
+        chatMessages.insertAdjacentHTML('beforeend', thinkingHtml);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+// Function to remove thinking animation
+function removeThinking() {
+    const thinkingContainer = document.querySelector('.thinking-container');
+    if (thinkingContainer) {
+        thinkingContainer.remove();
+    }
+}
+</script>
+{% endblock %}
+
+

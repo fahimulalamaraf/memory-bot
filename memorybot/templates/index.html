@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-content">
+    <h1>Welcome to Your Memory Bot</h1>
+    <p>Discover, chat, and relive your favorite photo memories with AI.</p>
+    <a href="{{ url_for('gallery') }}" class="btn">Explore Gallery</a>
+  </div>
+</section>
+{% endblock %}
